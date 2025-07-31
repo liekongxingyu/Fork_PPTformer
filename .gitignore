@@ -1,0 +1,23 @@
+# 模型权重文件
+*.pth
+*.pt
+*.ckpt
+*.safetensors
+
+# 实验结果目录
+experiments/
+checkpoints/
+results/
+logs/
+tb_logger/
+tb_logger_archived/
+
+
+# 缓存文件
+__pycache__/
+*.pyc
+.cache/
+
+# 数据集（如果很大）
+Dataset/
+data/
