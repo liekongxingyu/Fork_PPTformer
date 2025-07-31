@@ -13,7 +13,7 @@
       "env": {
         "PYTHONPATH": "${workspaceFolder}" // 设置你的包路径
       },
-      "args": ["-opt", "options/train/CSD/NAFNet-width32.yml"]
+      "args": ["-opt", "options/Train/MSD_CSD.yml"]
     }
   ]
 }

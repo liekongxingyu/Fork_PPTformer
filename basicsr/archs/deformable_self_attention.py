@@ -18,21 +18,26 @@ except ImportError:
     print("natten 0.17 not installed, using dummy implementation")
 
 
+# 可变形邻域注意力
 class DeformableNeighborhoodAttention(nn.Module):
 
     def __init__(
         self,
         dim: int,
         num_heads: int,
+        # 邻域窗口尺寸
         kernel_size: int,
         dilation: int = 1,
         offset_range_factor=1.0,
         stride=1,
+        # 用不用位置编码
         use_pe=True,
         dwc_pe=True,
+        # 用不用可变型
         no_off=False,
         fixed_pe=False,
         is_causal: bool = False,
+        # 用不用相对位置偏置
         rel_pos_bias: bool = False,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
@@ -42,9 +47,11 @@ class DeformableNeighborhoodAttention(nn.Module):
         n_head_channels = dim // num_heads
         n_groups = num_heads
         self.dwc_pe = dwc_pe
+        # 每个头通道数
         self.n_head_channels = n_head_channels
         self.scale = self.n_head_channels ** -0.5
         self.n_heads = num_heads
+        # 总通道数
         self.nc = n_head_channels * num_heads
         self.n_groups = num_heads
         self.n_group_channels = self.nc // self.n_groups
@@ -61,6 +68,7 @@ class DeformableNeighborhoodAttention(nn.Module):
         kk = self.ksize
         pad_size = kk // 2 if kk != stride else 0
 
+        # 深度可分卷积，输出2通道，为x，y方向的偏移
         self.conv_offset = nn.Sequential(
             nn.Conv2d(self.n_group_channels, self.n_group_channels,
                       kk, stride, pad_size, groups=self.n_group_channels),
@@ -110,6 +118,7 @@ class DeformableNeighborhoodAttention(nn.Module):
         self.rpe_table = nn.Conv2d(
             self.nc, self.nc, kernel_size=3, stride=1, padding=1, groups=self.nc)
 
+    # 生成参考坐标网络
     @torch.no_grad()
     def _get_ref_points(self, H_key, W_key, B, dtype, device):
 
@@ -128,6 +137,7 @@ class DeformableNeighborhoodAttention(nn.Module):
 
         return ref
 
+    # 生成查询坐标网络
     @torch.no_grad()
     def _get_q_grid(self, H, W, B, dtype, device):
 
@@ -152,6 +162,7 @@ class DeformableNeighborhoodAttention(nn.Module):
         q = self.proj_q(x)
         q_off = einops.rearrange(
             q, 'b (g c) h w -> (b g) c h w', g=self.n_groups, c=self.n_group_channels)
+        
         offset = self.conv_offset(q_off).contiguous()  # B * g 2 Hg Wg
 
         Hk, Wk = offset.size(2), offset.size(3)
@@ -243,6 +254,7 @@ class DeformableNeighborhoodAttention(nn.Module):
         return y
 
 
+# 多尺度邻域注意力（输入维度与输出维度一致）
 class MSDeformableNeighborhoodAttention(nn.Module):
 
     def __init__(
@@ -505,3 +517,56 @@ class MSDeformableNeighborhoodAttention(nn.Module):
         y = self.proj_drop(self.proj_out(out))
 
         return y
+
+
+if __name__ == '__main__':
+    # 基础配置
+    dim = 36           # 通道数（36能被6和12整除）
+    num_heads = 6      # 注意力头数（能被3整除）
+    height = 160       # 图像高度
+    width = 160        # 图像宽度
+    kernel_size = 3    # 邻域窗口大小
+    
+    # 高级配置
+    # dim = 96
+    # num_heads = 12
+    # height = 256
+    # width = 256
+    # kernel_size = 5
+    
+    # 创建模型
+    net = MSDeformableNeighborhoodAttention(
+        dim=dim, 
+        num_heads=num_heads,
+        kernel_size=kernel_size,
+        dilation=1,
+        offset_range_factor=1.0,
+        rel_pos_bias=True,
+        attn_drop=0.0,
+        proj_drop=0.0
+    )
+    
+    # 输入形状
+    inp_shape = (dim, height, width)
+    
+    # 计算模型复杂度
+    from ptflops import get_model_complexity_info
+    
+    macs, params = get_model_complexity_info(net, inp_shape, verbose=False, print_per_layer_stat=False)
+    
+    params = float(params[:-3])
+    macs = float(macs[:-4])
+    
+    print(f"MACs: {macs:.2f}G")
+    print(f"Params: {params:.2f}M")
+    
+    # 测试输入输出维度
+    import torch
+    test_input = torch.randn(1, dim, height, width)
+    with torch.no_grad():
+        test_output = net(test_input)
+    
+    print(f"Input shape: {test_input.shape}")
+    print(f"Output shape: {test_output.shape}")
+    print(f"Shape preserved: {test_input.shape == test_output.shape}")
+

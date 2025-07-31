@@ -111,8 +111,10 @@ class FeMaSRModel(BaseModel):
         self.optimizer_g.zero_grad()
         # self.print_network(self.net_g)
 
-        self.output = self.net_g(self.lq, self.lq_mask)
+        # self.output = self.net_g(self.lq, self.lq_mask)
 
+        self.output = self.net_g(self.lq)
+        
         l_g_total = 0
         loss_dict = OrderedDict()
 
